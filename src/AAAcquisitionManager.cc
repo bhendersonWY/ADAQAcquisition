@@ -48,7 +48,8 @@ AAAcquisitionManager::AAAcquisitionManager()
     LLD(0), ULD(0), SampleHeight(0.), TriggerHeight(0.),
     PulseHeight(0.), PulseArea(0.), PSDTotal(0.), PSDTail(0.), PeakPosition(0),
     RawTimeStamp(0), RateAccum(0),
-    FillWaveformTree(false), TheReadoutManager(new ADAQReadoutManager)
+    FillWaveformTree(false), TheReadoutManager(new ADAQReadoutManager),
+    oldPulseArea(0.), oldPulseHeight(0.), oldBaseline(0.), oldTotal(0.), oldTail(0.)
 {
   if(TheAcquisitionManager)
     cout << "\nError! The AcquisitionManager was constructed twice!\n" << endl;
@@ -435,8 +436,8 @@ void AAAcquisitionManager::StartAcquisition()
       // Proceed only if FPGA events exceeds user-specified readout
       // events in order to maximize efficiency
       if(FPGAEvents < TheSettings->EventsBeforeReadout and 
-	 TheSettings->AcquisitionControl == 0)
-	continue;
+              TheSettings->AcquisitionControl == 0)
+        continue;
 
       // Transfer data from FPGA buffer to PC buffer
       DGManager->ReadData(Buffer, &ReadSize);
@@ -481,11 +482,11 @@ void AAAcquisitionManager::StartAcquisition()
 
       // Skip channels that are not enabled for efficiency
       if(!TheSettings->ChEnable[ch])
-	continue;
+        continue;
 
       // If DPP-PSD, get number of events in present channel
       if(UsePSDFirmware)
-	PCEvents = NumPSDEvents[ch];
+        PCEvents = NumPSDEvents[ch];
       
       // Reset all channel's corrected time stamp values to -42 to
       // ensure time stamps only register for the triggered channel
@@ -494,98 +495,98 @@ void AAAcquisitionManager::StartAcquisition()
       // Loop over the digitizer stored events in the PC buffer
       for(Int_t evt=0; evt<PCEvents; evt++){
 
-	////////////////////////////
-	// Pre-event-readout actions
+	      ////////////////////////////
+	      // Pre-event-readout actions
 
-	// Reset event-level variables
-	BaselineValue[ch] = PulseHeight = PulseArea = 0.;
-	PSDTotal = PSDTail = 0.;
-	WaveformData[ch]->Initialize();
+	      // Reset event-level variables
+	      BaselineValue[ch] = PulseHeight = PulseArea = 0.;
+	      PSDTotal = PSDTail = 0.;
+	      WaveformData[ch]->Initialize();
 	
-	if(AcquisitionTimerEnable){
-	  
-	  // Calculate the elapsed time since the timer was started
-	  AcquisitionTimePrev = AcquisitionTimeNow;
-	  AcquisitionTimeNow = time(NULL) - AcquisitionTimeStart; // [seconds]
-	  
-	  // Update the AQTimer widget only every second
-	  if(AcquisitionTimePrev != AcquisitionTimeNow){
-	    Int_t TimeRemaining = AcquisitionTimeStop - AcquisitionTimeNow;
-	    TheInterface->UpdateAQTimer(TimeRemaining);
-	  }
-	  
-	  // If the timer is zero then stop acquisition; make sure to
-	  // 'return' to completely escape the acquisition loop
-	  if(AcquisitionTimeNow >= AcquisitionTimeStop){
-	    StopAcquisition();
-	    return;
-	  }
-	}
+	      if(AcquisitionTimerEnable){
+	        
+	        // Calculate the elapsed time since the timer was started
+	        AcquisitionTimePrev = AcquisitionTimeNow;
+	        AcquisitionTimeNow = time(NULL) - AcquisitionTimeStart; // [seconds]
+	        
+	        // Update the AQTimer widget only every second
+	        if(AcquisitionTimePrev != AcquisitionTimeNow){
+	          Int_t TimeRemaining = AcquisitionTimeStop - AcquisitionTimeNow;
+	          TheInterface->UpdateAQTimer(TimeRemaining);
+	        }
+	        
+	        // If the timer is zero then stop acquisition; make sure to
+	        // 'return' to completely escape the acquisition loop
+	        if(AcquisitionTimeNow >= AcquisitionTimeStop){
+	          StopAcquisition();
+	          return;
+	        }
+	      }
 	
-	/////////////////////////////
-	// Event and waveform readout
+	      /////////////////////////////
+	      // Event and waveform readout
 	
-	// Perform CAEN standard and DPP-PSD waveform readout
+	      // Perform CAEN standard and DPP-PSD waveform readout
 	
-	if(!TheSettings->ZeroSuppressionEnable){
-	  
-	  // Perform standard firmware event and waveform readout
+	      if(!TheSettings->ZeroSuppressionEnable){
+	        
+	        // Perform standard firmware event and waveform readout
 
-	  if(UseSTDFirmware){
-	    
-	    // Fill the EventInfo structure with waveform data
-	    EventPointer = NULL;
-	    DGManager->GetEventInfo(Buffer, ReadSize, evt, &EventInfo, &EventPointer);
-	    
-	    // Segmentation fault protection
-	    if(EventPointer == NULL){
-	      continue;
-	    }
-	    
-	    //  Fill the EventWaveform structure with the digitized waveform
-	    DGManager->DecodeEvent(EventPointer, &EventWaveform);
-	    
-	    // Segmentation fault protection
-	    if(EventWaveform == NULL)
-	      continue;
-	  }
-	  
-	  // Perform DPP-PSD firmware waveform readout
-	  
-	  else if(UsePSDFirmware and AnalyzePSDWaveform){
+	        if(UseSTDFirmware){
+	          
+	          // Fill the EventInfo structure with waveform data
+	          EventPointer = NULL;
+	          DGManager->GetEventInfo(Buffer, ReadSize, evt, &EventInfo, &EventPointer);
+	          
+	          // Segmentation fault protection
+	          if(EventPointer == NULL){
+	            continue;
+	          }
+	          
+	          //  Fill the EventWaveform structure with the digitized waveform
+	          DGManager->DecodeEvent(EventPointer, &EventWaveform);
+	          
+	          // Segmentation fault protection
+	          if(EventWaveform == NULL)
+	            continue;
+	        }
+	        
+	        // Perform DPP-PSD firmware waveform readout
+	        
+	        else if(UsePSDFirmware and AnalyzePSDWaveform){
 
-	    // Segmentation fault protection for using the acquisition
-	    // timer. Timing can get out of sync at shut-down so this
-	    // check prevents the decoding events when memory has
-	    // already been freed to prevent crash.
-	    if(AcquisitionEnable)
-	      DGManager->DecodeDPPWaveforms(&PSDEvents[ch][evt], PSDWaveforms);
-	    else
-	      break;
-	  }
-	}
+	        // Segmentation fault protection for using the acquisition
+	        // timer. Timing can get out of sync at shut-down so this
+	        // check prevents the decoding events when memory has
+	        // already been freed to prevent crash.
+	        if(AcquisitionEnable)
+	          DGManager->DecodeDPPWaveforms(&PSDEvents[ch][evt], PSDWaveforms);
+	        else
+	          break;
+	        }
+	      }
 	
-	// Perform CAEN standard firmware zero suppression waveform readout
+	      // Perform CAEN standard firmware zero suppression waveform readout
 	
-	else{
+	      else{
 
-	  // Use ADAQDigitizer method to readout ZLE waveform directly
-	  // from the PC buffer into the Waveforms data member
-	  Bool_t ZLESuccess = DGManager->GetZLEWaveform(Buffer, evt, Waveforms);
-	  
-	  if(ZLESuccess != 0){
-	    cout << "\nAAAcquisitionManager::StartAcquisition() : You've encountered a serious error!\n"
-		 <<   "  There was an error reading out Event[" << evt << "] when using ZLE mode!\n"
-		 <<   "  This issue is likely due to using a RecordLength > 4030. This setting causes\n"
-		 <<   "  -- CAEN_DGTZ_GetNumEvents() to incorrectly return a '1'\n"
-		 <<   "  -- The readout PC buffer is not correctly filled causing algorithm to segfault\n"
-		 <<   "  CAEN has been contacted regarding this bug. ZSH (16 Oct 14)\n"
-		 << endl;
-	    
-	    continue;
-	  }
-	  //DGManager->PrintZLEEventInfo(Buffer, evt);
-	}
+	        // Use ADAQDigitizer method to readout ZLE waveform directly
+	        // from the PC buffer into the Waveforms data member
+	        Bool_t ZLESuccess = DGManager->GetZLEWaveform(Buffer, evt, Waveforms);
+	        
+	        if(ZLESuccess != 0){
+	          cout << "\nAAAcquisitionManager::StartAcquisition() : You've encountered a serious error!\n"
+		       <<   "  There was an error reading out Event[" << evt << "] when using ZLE mode!\n"
+		       <<   "  This issue is likely due to using a RecordLength > 4030. This setting causes\n"
+		       <<   "  -- CAEN_DGTZ_GetNumEvents() to incorrectly return a '1'\n"
+		       <<   "  -- The readout PC buffer is not correctly filled causing algorithm to segfault\n"
+		       <<   "  CAEN has been contacted regarding this bug. ZSH (16 Oct 14)\n"
+		       << endl;
+	          
+	          continue;
+	        }
+	        //DGManager->PrintZLEEventInfo(Buffer, evt);
+	      }
 	
 	///////////////////////////////////
 	// Post-readout waveform processing
@@ -770,7 +771,7 @@ void AAAcquisitionManager::StartAcquisition()
 	
 	
 	////////////////////////////
-	// Post-readout data storage 
+	// Post-readout data storage
 
 	// First, we set the most basic information about the waveform
 	// that we want to ensure is always stored in the ADAQ file
@@ -788,19 +789,39 @@ void AAAcquisitionManager::StartAcquisition()
 	
 	if(!TheSettings->DisplayNonUpdateable){
 	  
+    // Is this event new?  If not, write nonsense values to tree for this channel
+    if (PulseArea==oldPulseArea && PulseHeight==oldPulseHeight && oldTotal==PSDTotal && oldTail==PSDTail && oldBaseline==BaselineValue[ch])
+    {
+      WaveformData[ch]->SetBaseline(0.0);
+      if(TheSettings->WaveformStoreEnergyData){
+        WaveformData[ch]->SetPulseArea(-1.0);
+        WaveformData[ch]->SetPulseHeight(-1.0);
+      }
+      if(TheSettings->WaveformStorePSDData){
+        WaveformData[ch]->SetPSDTotalIntegral(-1.0);
+        WaveformData[ch]->SetPSDTailIntegral(-100.0);
+      }
+
+      continue;
+    }
+
 	  WaveformData[ch]->SetBaseline(BaselineValue[ch]);
+    oldBaseline = BaselineValue[ch];
 	  
 	  // Store pulse area/height data and baseline if specified
 	  if(TheSettings->WaveformStoreEnergyData){
 	    WaveformData[ch]->SetPulseArea(PulseArea);
 	    WaveformData[ch]->SetPulseHeight(PulseHeight);
+      oldPulseArea = PulseArea;
+      oldPulseHeight = PulseHeight;
 	  }
 	  // Store the total and tail PSD integrals if specified
 	  if(TheSettings->WaveformStorePSDData){
 	    WaveformData[ch]->SetPSDTotalIntegral(PSDTotal);
 	    WaveformData[ch]->SetPSDTailIntegral(PSDTail);
+      oldTotal = PSDTotal;
+      oldTail  = PSDTail;
 	  }
-
 
 	  ////////////////////////////////////////////
 	  // Handle calibration for live-time analysis
@@ -928,81 +949,81 @@ void AAAcquisitionManager::StartAcquisition()
     }
 	}
 	
-	///////////////////////////////////////
-	// Post-readout data persistent storage
+	  ///////////////////////////////////////
+	  // Post-readout data persistent storage
 	
-	if(TheSettings->WaveformStorageEnable){
-	  
-	  // Skip this waveform if the pulse area/height does not fall
-	  // within the discrimnator window (LLD to ULD). 
-	  if(TheSettings->LDEnable and !FillWaveformTree)
-	    continue;
-	  
-	  // Skip this waveform if readout is using DPP-PSD list mode
-	  // and the pulse area is exceeds maximum useful value
-	  if(UsePSDFirmware and TheSettings->PSDListAnalysis)
-	    if(PulseArea > pow(2,16)-2)
+	  if(TheSettings->WaveformStorageEnable){
+	    
+	    // Skip this waveform if the pulse area/height does not fall
+	    // within the discrimnator window (LLD to ULD). 
+	    if(TheSettings->LDEnable and !FillWaveformTree)
 	      continue;
+	    
+	    // Skip this waveform if readout is using DPP-PSD list mode
+	    // and the pulse area is exceeds maximum useful value
+	    if(UsePSDFirmware and TheSettings->PSDListAnalysis)
+	      if(PulseArea > pow(2,16)-2)
+	        continue;
 
-	  // If storing raw waveforms to disk then copy the read out
-	  // waveforms vector ("Waveforms") to the vector whose
-	  // address is assigned to the waveforms branch in the ROOT
-	  // TTree in the ADAQ file ("Waveforms4Storage"). While this
-	  // is slightly inefficient (i.e. having two
-	  // vector-of-vectors with the same data), it enables the
-	  // user to analyze and view the waveforms without having to
-	  // store them to disk. I am making the assumption that if
-	  // the user is storing full waveforms then they understand
-	  // the throughput penalty necessary to do this. Thus, the
-	  // small amount of CPU time required for copying the vectors
-	  // should be negligible.
-	  
-	  if(TheSettings->WaveformStoreRaw){
-	    for(int ch=0; ch<DGManager->GetNumChannels(); ch++){
-	      Waveforms4Storage[ch] = Waveforms[ch];
+	    // If storing raw waveforms to disk then copy the read out
+	    // waveforms vector ("Waveforms") to the vector whose
+	    // address is assigned to the waveforms branch in the ROOT
+	    // TTree in the ADAQ file ("Waveforms4Storage"). While this
+	    // is slightly inefficient (i.e. having two
+	    // vector-of-vectors with the same data), it enables the
+	    // user to analyze and view the waveforms without having to
+	    // store them to disk. I am making the assumption that if
+	    // the user is storing full waveforms then they understand
+	    // the throughput penalty necessary to do this. Thus, the
+	    // small amount of CPU time required for copying the vectors
+	    // should be negligible.
+	    
+	    if(TheSettings->WaveformStoreRaw){
+	      for(int ch=0; ch<DGManager->GetNumChannels(); ch++){
+	        Waveforms4Storage[ch] = Waveforms[ch];
+	      }
+	    }
+	    
+	    // If the user has specified to store ANY data at all then
+	    // fill the waveform tree via the readout manager
+	    if(TheSettings->WaveformStoreRaw or
+	       TheSettings->WaveformStoreEnergyData or 
+	       TheSettings->WaveformStorePSDData)
+	      TheReadoutManager->GetWaveformTree()->Fill();
+	    
+	    // Reset the bool used to determine if the LLD/ULD window
+	    // should be used as the "trigger" for writing waveforms
+	    FillWaveformTree = false;
+	  }
+	
+	  /////////////////////////////////
+	  // Post-readout waveform plotting
+	
+	  // Plot the waveform under specific criterion to minimize CPU
+	  // intensity. Only plot the waveforms in continuous data
+	  // acquisition mode and only plot the first waveform event in
+	  // the case of many events in a single readout.
+	
+	  if(TheSettings->WaveformMode){
+	    
+	    if(TheSettings->DisplayContinuous and evt == 0){
+
+	      if(UseSTDFirmware or (UsePSDFirmware and AnalyzePSDWaveform)){
+	        
+	        // Draw the digitized waveform
+	        TheGraphicsManager->PlotWaveforms(Waveforms, WaveformLength);
+	        
+	        // Draw graphical objects associated with the waveform
+	        TheGraphicsManager->DrawWaveformGraphics(BaselineValue,
+						         PeakPosition,
+						         PSDTotalAbsStart,
+						         PSDTotalAbsStop,
+						         PSDTailAbsStart,
+						         PSDTailAbsStop);
+	      }
 	    }
 	  }
-	  
-	  // If the user has specified to store ANY data at all then
-	  // fill the waveform tree via the readout manager
-	  if(TheSettings->WaveformStoreRaw or
-	     TheSettings->WaveformStoreEnergyData or 
-	     TheSettings->WaveformStorePSDData)
-	    TheReadoutManager->GetWaveformTree()->Fill();
-	  
-	  // Reset the bool used to determine if the LLD/ULD window
-	  // should be used as the "trigger" for writing waveforms
-	  FillWaveformTree = false;
-	}
-	
-	/////////////////////////////////
-	// Post-readout waveform plotting
-	
-	// Plot the waveform under specific criterion to minimize CPU
-	// intensity. Only plot the waveforms in continuous data
-	// acquisition mode and only plot the first waveform event in
-	// the case of many events in a single readout.
-	
-	if(TheSettings->WaveformMode){
-	  
-	  if(TheSettings->DisplayContinuous and evt == 0){
-
-	    if(UseSTDFirmware or (UsePSDFirmware and AnalyzePSDWaveform)){
-	      
-	      // Draw the digitized waveform
-	      TheGraphicsManager->PlotWaveforms(Waveforms, WaveformLength);
-	      
-	      // Draw graphical objects associated with the waveform
-	      TheGraphicsManager->DrawWaveformGraphics(BaselineValue,
-						       PeakPosition,
-						       PSDTotalAbsStart,
-						       PSDTotalAbsStop,
-						       PSDTailAbsStart,
-						       PSDTailAbsStop);
-	    }
-	  }
-	}
-	EventCounter++;
+	  EventCounter++;
 	
       } // End of the data readout loop over events
       
@@ -1343,13 +1364,13 @@ void AAAcquisitionManager::CreateADAQFile(string FileName)
 {
   if(TheReadoutManager->GetADAQFileOpen())
     return;
+
+  ADAQDigitizer *DGManager = AAVMEManager::GetInstance()->GetDGManager();
+  Int_t DGChannels = DGManager->GetNumChannels();
   
   // Create a new ADAQ file via the readout manager
   TheReadoutManager->CreateFile(FileName);
-
-  ADAQDigitizer *DGManager = AAVMEManager::GetInstance()->GetDGManager();
   
-  Int_t DGChannels = DGManager->GetNumChannels();
   for(Int_t ch=0; ch<DGChannels; ch++){
 
     // For each digitizer channel, create the two mandatory TTree branches:

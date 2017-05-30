@@ -206,6 +206,13 @@ private:
   vector<vector<uint16_t> > Waveforms4Storage;
 #endif
   vector<ADAQWaveformData *> WaveformData;
+
+  // Variables to prevent duplicate event writing
+  double oldPulseArea;
+  double oldPulseHeight;
+  double oldBaseline;
+  double oldTotal;
+  double oldTail;  
 };
 
 #endif
