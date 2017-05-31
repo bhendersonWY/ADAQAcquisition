@@ -208,11 +208,11 @@ private:
   vector<ADAQWaveformData *> WaveformData;
 
   // Variables to prevent duplicate event writing
-  double oldPulseArea;
-  double oldPulseHeight;
-  double oldBaseline;
-  double oldTotal;
-  double oldTail;  
+  vector<double> oldPulseArea;
+  vector<double> oldPulseHeight;
+  vector<double> oldBaseline;
+  vector<double> oldTotal;
+  vector<double> oldTail;  
 };
 
 #endif

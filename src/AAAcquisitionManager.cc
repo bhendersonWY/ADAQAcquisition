@@ -48,8 +48,7 @@ AAAcquisitionManager::AAAcquisitionManager()
     LLD(0), ULD(0), SampleHeight(0.), TriggerHeight(0.),
     PulseHeight(0.), PulseArea(0.), PSDTotal(0.), PSDTail(0.), PeakPosition(0),
     RawTimeStamp(0), RateAccum(0),
-    FillWaveformTree(false), TheReadoutManager(new ADAQReadoutManager),
-    oldPulseArea(0.), oldPulseHeight(0.), oldBaseline(0.), oldTotal(0.), oldTail(0.)
+    FillWaveformTree(false), TheReadoutManager(new ADAQReadoutManager)
 {
   if(TheAcquisitionManager)
     cout << "\nError! The AcquisitionManager was constructed twice!\n" << endl;
@@ -88,6 +87,12 @@ void AAAcquisitionManager::Initialize()
     PSDTotalAbsStop.push_back(0);
     PSDTailAbsStart.push_back(0);
     PSDTailAbsStop.push_back(0);
+
+    oldPulseArea.push_back(0);
+    oldPulseHeight.push_back(0);
+    oldBaseline.push_back(0);
+    oldTotal.push_back(0);
+    oldTail.push_back(0);  
     
     CalibrationDataStruct DataStruct;
     CalibrationData.push_back(DataStruct);
@@ -790,7 +795,7 @@ void AAAcquisitionManager::StartAcquisition()
 	if(!TheSettings->DisplayNonUpdateable){
 	  
     // Is this event new?  If not, write nonsense values to tree for this channel
-    if (PulseArea==oldPulseArea && PulseHeight==oldPulseHeight && oldTotal==PSDTotal && oldTail==PSDTail && oldBaseline==BaselineValue[ch])
+    if (PulseArea==oldPulseArea[ch] && PulseHeight==oldPulseHeight[ch] && oldTotal[ch]==PSDTotal && oldTail[ch]==PSDTail && oldBaseline[ch]==BaselineValue[ch])
     {
       WaveformData[ch]->SetBaseline(0.0);
       if(TheSettings->WaveformStoreEnergyData){
@@ -806,21 +811,21 @@ void AAAcquisitionManager::StartAcquisition()
     }
 
 	  WaveformData[ch]->SetBaseline(BaselineValue[ch]);
-    oldBaseline = BaselineValue[ch];
+    oldBaseline[ch] = BaselineValue[ch];
 	  
 	  // Store pulse area/height data and baseline if specified
 	  if(TheSettings->WaveformStoreEnergyData){
 	    WaveformData[ch]->SetPulseArea(PulseArea);
 	    WaveformData[ch]->SetPulseHeight(PulseHeight);
-      oldPulseArea = PulseArea;
-      oldPulseHeight = PulseHeight;
+      oldPulseArea[ch] = PulseArea;
+      oldPulseHeight[ch] = PulseHeight;
 	  }
 	  // Store the total and tail PSD integrals if specified
 	  if(TheSettings->WaveformStorePSDData){
 	    WaveformData[ch]->SetPSDTotalIntegral(PSDTotal);
 	    WaveformData[ch]->SetPSDTailIntegral(PSDTail);
-      oldTotal = PSDTotal;
-      oldTail  = PSDTail;
+      oldTotal[ch] = PSDTotal;
+      oldTail[ch]  = PSDTail;
 	  }
 
 	  ////////////////////////////////////////////
